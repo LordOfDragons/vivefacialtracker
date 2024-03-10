@@ -11,7 +11,7 @@ Enter the virtual environment:
 > source venv_vftta/bin/activate
 
 Install the required packages:
-> python -m pip install --upgrade toga numpy Pillowv4l2py opencv-python
+> python -m pip install --upgrade toga numpy Pillow v4l2py opencv-python
 
 Run the application:
 > cd src
