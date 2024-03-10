@@ -1,0 +1,359 @@
+This file contains more in depth information about the VIVE Facial Tracker
+and how it can be accessed. Right now this works under Linux.
+
+
+Hardware
+========
+
+The VIVE Facial Tracker is using two OV6211 image sensors (from OmniVision)
+and an image signal processor OV00580-B21G-1C (also from OmniVision). This
+means the tracker is able to record stereo footage of the lower face area.
+Information about these devices can be found on the manufacturer website:
+- https://www.ovt.com/products/ov6211/
+- https://www.ovt.com/products/ov580/
+
+The cameras record at 400x400 at 60Hz. The resulting image though is also
+400x400 hence the camera images are shrunk both to 200x400 size and put
+side by side. Looking at the user the left side image is produced by the
+left camera.
+
+An IR light source is used to illuminate the face of the user. The cameras
+thus do not record color information but luminance information of the IR
+light. See below for what this means for the image format.
+
+
+Video4Linux
+===========
+
+This is the output of the v4l2-ctl command:
+
+> v4l2-ctl -d /dev/video2 --list-formats-ext
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Bus 004 Device 024: ID 0bb4:0321 HTC (High Tech Computer Corp.) HTC Multimedia Camera
+
+HTC Multimedia Camera: HTC Mult (usb-0000:0f:00.0-4.1.2.1):
+        /dev/video2
+        /dev/video3
+        /dev/media1
+
+ioctl: VIDIOC_ENUM_FMT
+        Type: Video Capture
+
+        [0]: 'YUYV' (YUYV 4:2:2)
+                Size: Discrete 400x400
+                        Interval: Discrete 0.017s (60.000 fps)
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+
+The device thus provides YUV422 images. Since the image is produced using
+IR light recording only a grayscale image is produced. The device though
+does not output a proper YUV image representing a grayscale image. Instead
+the device stores the same grayscale image into all 3 image channels. This
+in particular trips video capture software trying to convert YUV into RGB.
+The resulting image is broken. It is thus required to bypass such conversations
+and instead extract the Y channel using it as a grayscale image. This in
+particular allows to do this rather fast by only decoding the "4" part and
+ignoring the "22" part. Basically this boils down to a simple copy the
+first width*height pixels of the frame data and ignoring the rest.
+
+The device also does not provide any control support like brightness or
+exposure. Instead an exposure and gain parameter can be set directly using
+device registers. See below for more information.
+
+
+USB
+===
+
+This is the output of the lsusb command:
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+Bus 004 Device 076: ID 0bb4:0321 HTC (High Tech Computer Corp.) HTC Multimedia Camera
+Device Descriptor:
+  bLength                18
+  bDescriptorType         1
+  bcdUSB               3.00
+  bDeviceClass          239 Miscellaneous Device
+  bDeviceSubClass         2 [unknown]
+  bDeviceProtocol         1 Interface Association
+  bMaxPacketSize0         9
+  idVendor           0x0bb4 HTC (High Tech Computer Corp.)
+  idProduct          0x0321 HTC Multimedia Camera
+  bcdDevice            1.00
+  iManufacturer           1 HTC Multimedia Camera
+  iProduct                2 HTC Multimedia Camera
+  iSerial                 0 
+  bNumConfigurations      1
+  Configuration Descriptor:
+    bLength                 9
+    bDescriptorType         2
+    wTotalLength       0x00de
+    bNumInterfaces          2
+    bConfigurationValue     1
+    iConfiguration          0 
+    bmAttributes         0x80
+      (Bus Powered)
+    MaxPower              512mA
+    Interface Association:
+      bLength                 8
+      bDescriptorType        11
+      bFirstInterface         0
+      bInterfaceCount         2
+      bFunctionClass         14 Video
+      bFunctionSubClass       3 Video Interface Collection
+      bFunctionProtocol       0 
+      iFunction               2 HTC Multimedia Camera
+    Interface Descriptor:
+      bLength                 9
+      bDescriptorType         4
+      bInterfaceNumber        0
+      bAlternateSetting       0
+      bNumEndpoints           1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      1 Video Control
+      bInterfaceProtocol      0 
+      iInterface              2 HTC Multimedia Camera
+      VideoControl Interface Descriptor:
+        bLength                13
+        bDescriptorType        36
+        bDescriptorSubtype      1 (HEADER)
+        bcdUVC               1.10
+        wTotalLength       0x004f
+        dwClockFrequency      150.000000MHz
+        bInCollection           1
+        baInterfaceNr( 0)       1
+      VideoControl Interface Descriptor:
+        bLength                18
+        bDescriptorType        36
+        bDescriptorSubtype      2 (INPUT_TERMINAL)
+        bTerminalID             1
+        wTerminalType      0x0201 Camera Sensor
+        bAssocTerminal          0
+        iTerminal               0 
+        wObjectiveFocalLengthMin      0
+        wObjectiveFocalLengthMax      0
+        wOcularFocalLength            0
+        bControlSize                  3
+        bmControls           0x00000000
+      VideoControl Interface Descriptor:
+        bLength                 9
+        bDescriptorType        36
+        bDescriptorSubtype      3 (OUTPUT_TERMINAL)
+        bTerminalID             2
+        wTerminalType      0x0101 USB Streaming
+        bAssocTerminal          0
+        bSourceID               4
+        iTerminal               0 
+      VideoControl Interface Descriptor:
+        bLength                13
+        bDescriptorType        36
+        bDescriptorSubtype      5 (PROCESSING_UNIT)
+        bUnitID                 3
+        bSourceID               1
+        wMaxMultiplier          0
+        bControlSize            3
+        bmControls     0x00000000
+        iProcessing             2 HTC Multimedia Camera
+        bmVideoStandards     0x00
+      VideoControl Interface Descriptor:
+        bLength                26
+        bDescriptorType        36
+        bDescriptorSubtype      6 (EXTENSION_UNIT)
+        bUnitID                 4
+        guidExtensionCode         {2ccb0bda-6331-4fdb-850e-79054dbd5671}
+        bNumControls            2
+        bNrInPins               1
+        baSourceID( 0)          3
+        bControlSize            1
+        bmControls( 0)       0x03
+        iExtension              2 HTC Multimedia Camera
+      Endpoint Descriptor:
+        bLength                 7
+        bDescriptorType         5
+        bEndpointAddress     0x86  EP 6 IN
+        bmAttributes            3
+          Transfer Type            Interrupt
+          Synch Type               None
+          Usage Type               Data
+        wMaxPacketSize     0x0040  1x 64 bytes
+        bInterval               9
+        bMaxBurst               0
+    Interface Descriptor:
+      bLength                 9
+      bDescriptorType         4
+      bInterfaceNumber        1
+      bAlternateSetting       0
+      bNumEndpoints           1
+      bInterfaceClass        14 Video
+      bInterfaceSubClass      2 Video Streaming
+      bInterfaceProtocol      0 
+      iInterface              0 
+      VideoStreaming Interface Descriptor:
+        bLength                            14
+        bDescriptorType                    36
+        bDescriptorSubtype                  1 (INPUT_HEADER)
+        bNumFormats                         1
+        wTotalLength                   0x004d
+        bEndpointAddress                 0x81  EP 1 IN
+        bmInfo                              0
+        bTerminalLink                       2
+        bStillCaptureMethod                 0
+        bTriggerSupport                     0
+        bTriggerUsage                       0
+        bControlSize                        1
+        bmaControls( 0)                     0
+      VideoStreaming Interface Descriptor:
+        bLength                            27
+        bDescriptorType                    36
+        bDescriptorSubtype                  4 (FORMAT_UNCOMPRESSED)
+        bFormatIndex                        1
+        bNumFrameDescriptors                1
+        guidFormat                            {32595559-0000-0010-8000-00aa00389b71}
+        bBitsPerPixel                      16
+        bDefaultFrameIndex                  1
+        bAspectRatioX                       0
+        bAspectRatioY                       0
+        bmInterlaceFlags                 0x00
+          Interlaced stream or variable: No
+          Fields per frame: 2 fields
+          Field 1 first: No
+          Field pattern: Field 1 only
+        bCopyProtect                        0
+      VideoStreaming Interface Descriptor:
+        bLength                            30
+        bDescriptorType                    36
+        bDescriptorSubtype                  5 (FRAME_UNCOMPRESSED)
+        bFrameIndex                         1
+        bmCapabilities                   0x00
+          Still image unsupported
+        wWidth                            400
+        wHeight                           400
+        dwMinBitRate                153600000
+        dwMaxBitRate                153600000
+        dwMaxVideoFrameBufferSize      320000
+        dwDefaultFrameInterval         166666
+        bFrameIntervalType                  1
+        dwFrameInterval( 0)            166666
+      VideoStreaming Interface Descriptor:
+        bLength                             6
+        bDescriptorType                    36
+        bDescriptorSubtype                 13 (COLORFORMAT)
+        bColorPrimaries                     1 (BT.709,sRGB)
+        bTransferCharacteristics            1 (BT.709)
+        bMatrixCoefficients                 4 (SMPTE 170M (BT.601))
+      Endpoint Descriptor:
+        bLength                 7
+        bDescriptorType         5
+        bEndpointAddress     0x81  EP 1 IN
+        bmAttributes            2
+          Transfer Type            Bulk
+          Synch Type               None
+          Usage Type               Data
+        wMaxPacketSize     0x0400  1x 1024 bytes
+        bInterval               0
+        bMaxBurst              15
+Binary Object Store Descriptor:
+  bLength                 5
+  bDescriptorType        15
+  wTotalLength       0x0016
+  bNumDeviceCaps          2
+  USB 2.0 Extension Device Capability:
+    bLength                 7
+    bDescriptorType        16
+    bDevCapabilityType      2
+    bmAttributes   0x00000006
+      BESL Link Power Management (LPM) Supported
+  SuperSpeed USB Device Capability:
+    bLength                10
+    bDescriptorType        16
+    bDevCapabilityType      3
+    bmAttributes         0x00
+    wSpeedsSupported   0x000c
+      Device can operate at High Speed (480Mbps)
+      Device can operate at SuperSpeed (5Gbps)
+    bFunctionalitySupport   2
+      Lowest fully-functional device speed is High Speed (480Mbps)
+    bU1DevExitLat          10 micro seconds
+    bU2DevExitLat          32 micro seconds
+Device Status:     0x0000
+  (Bus Powered)
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+
+Of perticular interes is the "VideoControl Interface Descriptor" guidExtensionCode
+value "{2ccb0bda-6331-4fdb-850e-79054dbd5671}". This matches with the log output
+of somebody else posted on the internet who used a "ZED2i" camera. This means in
+particular that the open source code of stereolabs for their ZED cameras has some
+likeness to the USB protocol spoken by the VIVE Facial Tracker:
+
+- https://github.com/stereolabs/zed-open-capture/blob/5cf66ff777175776451b9b59ecc6231d730fa202/src/videocapture.cpp
+
+
+USB Protocol / Extension Unit
+=============================
+
+The VIVE Facial Tracker is a video type USB device and behaves like one with
+an exception. The data stream is not activated using the regular means but
+has to be activated using the "Extension Unit". Basically the VIVE Facial
+Tracker is controlled by sending commands to the "Extension Unit". See the
+python code in "vivetracker.py" for the actual format of these commands.
+
+In general you have to use SET_CUR commands to set camera parameters and to
+enable the camera stream. The device uses a fixed size scratch buffer of
+384 for all sending and receiving. Only the relevant command bytes are
+actually consumed while the rest is disregarded.
+
+Camera parameters are set using the 0xab request id. Analyzing the protocol there
+are 11 registers touched by the original SRanipal software. The ZED2i lists in
+particular 6 parameters to control exposure and gain:
+- ADDR_EXP_H
+- ADDR_EXP_M
+- ADDR_EXP_L
+- ADDR_GAIN_H
+- ADDR_GAIN_M
+- ADDR_GAIN_L
+
+Using some testing they most probably map like this to the VIVE Facial Tracker:
+- x00 => x40
+- x08 => x01
+- x70 => x00
+- x02 => xff : exposure high
+- x03 => xff : exposure med
+- x04 => xff : exposure low
+- x0e => xff
+- x05 => xb2 : gain high
+- x06 => xb2 : gain med
+- x07 => xb2 : gain low
+- x0f => x03
+
+The values on the left side are the register address and the value on the right
+side is the value set by SRanipal. Testing different values produced worse
+results so the values used by SRanipal seem to be the best choice. What the
+other parameters are all about is unknown. Testing different values also made
+the result worse at best.
+
+The x14 request is the one enabling and disabling the data stream. Hence first
+the camera parameters have to be set then the stream has to be enabled.
+
+Once the data stream is enabled the camera is streaming data in the YUV422 format
+using regular USB video device streaming.
+
+
+Windows
+=======
+
+Right now only Linux is supported since direct device access is used using ioctl.
+On windows there is something similar: DeviceIOControl
+- https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol
+
+This requires to open the device using Createfile and some special syntax
+- https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea
+
+On python this should be also possible using pywin32:
+- https://pypi.org/project/pywin32/
+- https://mhammond.github.io/pywin32/win32file__DeviceIoControl_meth.html
+> python -m pip install --upgrade pywin32
+
+There are some examples that could help:
+- https://github.com/andreaschiavinato/python_grabber
+- https://github.com/jaraco/jaraco.video
+
+This has though not been looked at in more detail so far. Feel free to do it.

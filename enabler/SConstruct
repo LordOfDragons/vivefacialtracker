@@ -1,0 +1,8 @@
+parent_env = Environment(CPPPATH='.', LIBPATH='.')
+
+params = Variables(['custom.py'])
+params.Add(PathVariable('prefix', 'System path', '/usr', PathVariable.PathAccept))
+params.Add(PathVariable('execdir', 'System binaries', '${prefix}/bin', PathVariable.PathAccept))
+params.Update(parent_env)
+
+SConscript(dirs='src', variant_dir='build', duplicate=0, exports='parent_env')

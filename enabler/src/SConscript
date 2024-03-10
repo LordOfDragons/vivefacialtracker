@@ -1,0 +1,15 @@
+Import('parent_env')
+env = parent_env.Clone()
+
+sources = ['main.cpp']
+
+objects = [env.StaticObject(s) for s in sources]
+
+env.Append(LIBS = ['usb-1.0'])
+env.Append(CXXFLAGS = ['-g'])
+
+program = env.Program('enable_vive_face_tracker', objects)
+install = env.Install(env.subst('$execdir'), program)
+
+env.Alias('build', program)
+env.Alias('install', install)
