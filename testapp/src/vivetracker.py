@@ -1,10 +1,15 @@
+import platform
 import logging
 import ctypes
-import fcntl
 import time
 import cv2 as cv
 import numpy as np
 from timeit import default_timer as timer
+
+isLinux = platform.system() == 'Linux'
+
+if isLinux:
+    import fcntl
 
 
 _IOC_NRBITS = 8
@@ -105,20 +110,25 @@ class ViveTracker:
             self._deactivate_tracker()
             raise
 
-    @staticmethod
-    def is_camera_vive_tracker(device: "v4l.Device") -> bool:
-        """Detect if this is a VIVE Face Tracker.
+    if isLinux:
+        @staticmethod
+        def is_camera_vive_tracker(device: 'v4l.Device') -> bool:
+            """Detect if this is a VIVE Face Tracker.
 
-        This is done right now by looking at the human readable device
-        description which might not be fool proof. Better would be to
-        check the vendor-id(0x0bb4) and device-id (0x0321). But these
-        can be only found by querying full USB descriptor. Left for
-        the reader as excercise.
-        """
-        check = "HTC Multimedia Camera" in device.info.card
-        ViveTracker._logger.info("is_camera_vive_tracker: '{}' -> {}".format(
-            device.info.card, check))
-        return check
+            This is done right now by looking at the human readable device
+            description which might not be fool proof. Better would be to
+            check the vendor-id(0x0bb4) and device-id (0x0321). But these
+            can be only found by querying full USB descriptor. Left for
+            the reader as excercise.
+            """
+            check = "HTC Multimedia Camera" in device.info.card
+            ViveTracker._logger.info("is_camera_vive_tracker: '{}' -> {}".format(
+                device.info.card, check))
+            return check
+    else:
+        @staticmethod
+        def is_camera_vive_tracker(device: 'cv.VideoCapture') -> bool:
+            return False
 
     def dispose(self: "ViveTracker") -> None:
         """Dispose of tracker.

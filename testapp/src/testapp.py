@@ -1,3 +1,4 @@
+import platform
 import toga
 import toga.style.pack as tp
 import numpy as np
@@ -5,10 +6,13 @@ import PIL
 import cv2 as cv
 import traceback
 import logging
+import asyncio as aio
 from camera import FTCamera
 from vivetracker import ViveTracker
 from enum import Enum
 from timeit import default_timer as timer
+
+isLinux = platform.system() == 'Linux'
 
 
 class SelectionHelper:
@@ -232,13 +236,20 @@ class TestApp(toga.App):
                 data = cv.split(data)[2]
             case TestApp.ShowType.RGB:
                 data = cv.cvtColor(data, cv.COLOR_YUV2RGB)
-        self.view_camera.image = PIL.Image.fromarray(data)
+        image = PIL.Image.fromarray(data)
+
+        if isLinux:
+            self.view_camera.image = image
+        else:
+            def do_it():
+                self.view_camera.image = image
+            aio.get_event_loop().call_later(0, do_it)
 
     async def open_ftcamera(self: "TestApp") -> None:
         if self.ftcamera:
             return
         try:
-            self.ftcamera = FTCamera(self.edit_device.value)
+            self.ftcamera = FTCamera(int(self.edit_device.value))
             self.ftcamera.open()
             self.ftcamera.callback_frame = self.process_frame
             self.ftcamera.start_read()
