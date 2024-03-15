@@ -30,6 +30,8 @@ class TestApp(toga.App):
         U = 'u'
         V = 'v'
         RGB = 'rgb'
+        SimulateFix = 'simfix'
+        SimulateFixY = 'simfixy'
 
     def __init__(self: "TestApp") -> None:
         super().__init__(
@@ -236,6 +238,17 @@ class TestApp(toga.App):
                 data = cv.split(data)[2]
             case TestApp.ShowType.RGB:
                 data = cv.cvtColor(data, cv.COLOR_YUV2RGB)
+            case TestApp.ShowType.SimulateFix:
+                # simulate opencv fix. the vive tracker delivers the image
+                # as YYY. opencv automatically converts this to BGR which
+                # is wrong. this convers is then reverted to get back to
+                # the YYY but considering it RGB
+                data = cv.cvtColor(data, cv.COLOR_YUV2BGR)
+                data = cv.cvtColor(data, cv.COLOR_BGR2YUV)
+            case TestApp.ShowType.SimulateFixY:
+                data = cv.cvtColor(data, cv.COLOR_YUV2BGR)
+                data = cv.cvtColor(data, cv.COLOR_BGR2YUV)
+                data = cv.split(data)[0]
         image = PIL.Image.fromarray(data)
 
         if isLinux:

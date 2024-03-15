@@ -15,6 +15,10 @@ if isLinux:
     import v4l2py.device as v4ld
 else:
     import threading
+    from pygrabber.dshow_graph import FilterGraph, FilterType
+    # import win32com.client as wcc
+    # import pythoncom as pcom
+    # from cffi import FFI
 
 
 class FTCamera:
@@ -123,6 +127,30 @@ class FTCamera:
             self._device: v4l.Device = None
         else:
             self._device: cv.VideoCapture = None
+            fg = FilterGraph()
+            for x in fg.get_input_devices():
+                FTCamera._logger.info(x)
+            f = fg.filter_factory.build_filter(FilterType.video_input, 0)
+            FTCamera._logger.info(f.get_name())
+            for x in f.get_formats():
+                FTCamera._logger.info(x)
+            FTCamera._logger.info(f.get_current_format())
+
+            """
+            FTCamera._logger.info("TEST2")
+            ffi = FFI()
+            c_lib = ffi.dlopen("Mfplat.dll")
+            ffi.cdef("HRESULT MFStartup(ULONG Version, DWORD dwFlags);")
+            MFSTARTUP_FULL = 0
+            MF_SDK_VERSION = 0x2
+            MF_API_VERSION = 0x70
+            MF_VERSION = MF_SDK_VERSION << 16 | MF_API_VERSION
+            S_OK = 0
+            retval = c_lib.MFStartup(MF_VERSION, MFSTARTUP_FULL)
+            if retval != S_OK:
+                raise Exception("MFStartup failed: {}".format(retval))
+            """
+
         self._controls: "list[FRCamera.Control]" = []
         self._task_read: aio.Task = None
         self._arr_data: np.ndarray = None
@@ -232,6 +260,7 @@ class FTCamera:
                 pixel_format=self._format.pixel_format)
         else:
             self._device.set(cv.CAP_PROP_CONVERT_RGB, 0)
+            self._device.set(cv.CAP_PROP_FORMAT, -1)
 
     def _init_arrays(self: "FTCamera") -> None:
         """Create numpy arrays to fill during capturing."""
