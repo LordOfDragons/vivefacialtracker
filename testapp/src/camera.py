@@ -15,10 +15,8 @@ if isLinux:
     import v4l2py.device as v4ld
 else:
     import threading
-    from pygrabber.dshow_graph import FilterGraph, FilterType
-    # import win32com.client as wcc
-    # import pythoncom as pcom
-    # from cffi import FFI
+    import pygrabber.dshow_graph as pgdsg
+    import pygrabber.dshow_ids as pgdsi
 
 
 class FTCamera:
@@ -90,8 +88,9 @@ class FTCamera:
                 pass
 
         class FrameSize:
-            def __init__(self: 'FTCamera.FrameSize', width: int,
-                         height: int, min_fps: int) -> None:
+            def __init__(self: 'FTCamera.FrameSize', index: int,
+                         width: int, height: int, min_fps: int) -> None:
+                self.index = index
                 self.width = width
                 self.height = height
                 self.min_fps = min_fps
@@ -112,7 +111,7 @@ class FTCamera:
 
     _logger = logging.getLogger("evcta.FTCamera")
 
-    def __init__(self: "FTCamera", index: int) -> None:
+    def __init__(self: 'FTCamera', index: int) -> None:
         """Create camera grabber.
 
         The camera is not yet opened. Set "callback_frame" then call
@@ -126,30 +125,7 @@ class FTCamera:
         if isLinux:
             self._device: v4l.Device = None
         else:
-            self._device: cv.VideoCapture = None
-            fg = FilterGraph()
-            for x in fg.get_input_devices():
-                FTCamera._logger.info(x)
-            f = fg.filter_factory.build_filter(FilterType.video_input, 0)
-            FTCamera._logger.info(f.get_name())
-            for x in f.get_formats():
-                FTCamera._logger.info(x)
-            FTCamera._logger.info(f.get_current_format())
-
-            """
-            FTCamera._logger.info("TEST2")
-            ffi = FFI()
-            c_lib = ffi.dlopen("Mfplat.dll")
-            ffi.cdef("HRESULT MFStartup(ULONG Version, DWORD dwFlags);")
-            MFSTARTUP_FULL = 0
-            MF_SDK_VERSION = 0x2
-            MF_API_VERSION = 0x70
-            MF_VERSION = MF_SDK_VERSION << 16 | MF_API_VERSION
-            S_OK = 0
-            retval = c_lib.MFStartup(MF_VERSION, MFSTARTUP_FULL)
-            if retval != S_OK:
-                raise Exception("MFStartup failed: {}".format(retval))
-            """
+            self._device: pgdsg.VideoInput = None
 
         self._controls: "list[FRCamera.Control]" = []
         self._task_read: aio.Task = None
@@ -171,7 +147,7 @@ class FTCamera:
         Callback function can be changed while capturing.
         """
 
-    def open(self: "FTCamera") -> None:
+    def open(self: 'FTCamera') -> None:
         """Open device if closed.
 
         This opens the device using Video4Linux. Finds frame size and
@@ -193,16 +169,30 @@ class FTCamera:
             self._device = v4l.Device.from_id(self._index)
             self._device.open()
         else:
-            self._device = cv.VideoCapture(self._index, cv.CAP_DSHOW)
-            if self._device.isOpened() == 0:
-                raise Exception("Could not open device")
+            self._filter_graph = pgdsg.FilterGraph()
+
+            self._filter_graph.add_video_input_device(self._index)
+            self._filter_video = self._filter_graph.get_input_device()
+            FTCamera._logger.info("Video input filter: {}".format(
+                self._filter_video.Name))
+            self._device = self._filter_video
+
+            self._filter_graph.add_sample_grabber(self._async_grabber)
+            self._filter_grabber = self._filter_graph.filters[
+                pgdsg.FilterType.sample_grabber]
+
+            self._filter_graph.add_null_render()
         self._find_format()
         self._find_frame_size()
         self._set_frame_format()
         self._init_arrays()
         self._find_controls()
 
-    def _find_format(self: "FTCamera") -> None:
+        if not isLinux:
+            self._filter_graph.prepare_preview_graph()
+            # self._filter_graph.print_debug_info()
+
+    def _find_format(self: 'FTCamera') -> None:
         """Logs all formats supported by camera and picks best one.
 
         Picks the first format which is YUV and supports capturing.
@@ -217,30 +207,35 @@ class FTCamera:
                                 if x.pixel_format == v4l.PixelFormat.YUYV
                                 and x.type == v4ld.BufferType.VIDEO_CAPTURE)
         else:
+            for x in self._filter_video.get_formats():
+                FTCamera._logger.info(x)
+            fmt = next(x for x in self._filter_video.get_formats()
+                       if x['media_type_str'] in ['YUY2'])
             self._format = FTCamera.FrameFormat(
-                self._device.get(cv.CAP_PROP_FOURCC),
-                self._device.get(cv.CAP_PROP_FOURCC))
+                fmt['media_type_str'], fmt['media_type_str'])
         FTCamera._logger.info("using format: {}".format(self._format))
 
-    def _find_frame_size(self: "FTCamera") -> None:
+    def _find_frame_size(self: 'FTCamera') -> None:
         """Logs all sizes supported by camera and picks best one.
 
         Picks the first size with YUV format and a minimum FPS of 30.
 
         Throws "Exception" if no suitable size is found.
         """
-        FTCamera._logger.info("sizes:")
         if isLinux:
+            FTCamera._logger.info("sizes:")
             for x in self._device.info.frame_sizes:
                 FTCamera._logger.info("- {}".format(x))
             self._frame_size = next(x for x in self._device.info.frame_sizes
                                     if x.pixel_format == v4l.PixelFormat.YUYV
                                     and x.min_fps >= 30)
         else:
+            fsize = next(x for x in self._filter_video.get_formats()
+                         if x['media_type_str'] == self._format.pixel_format
+                         and x['min_framerate'] >= 30)
             self._frame_size = FTCamera.FrameSize(
-                int(self._device.get(cv.CAP_PROP_FRAME_WIDTH)),
-                int(self._device.get(cv.CAP_PROP_FRAME_WIDTH)),
-                int(self._device.get(cv.CAP_PROP_FPS)))
+                fsize['index'], fsize['width'], fsize['height'],
+                int(fsize['max_framerate']))
 
         FTCamera._logger.info("using frame size : {}".format(self._frame_size))
         self._frame_width = self._frame_size.width
@@ -250,7 +245,7 @@ class FTCamera:
         self._half_frame_width = self._frame_width // 2
         self._half_frame_height = self._frame_height // 2
 
-    def _set_frame_format(self: "FTCamera") -> None:
+    def _set_frame_format(self: 'FTCamera') -> None:
         """Activates the found format and size."""
         if isLinux:
             self._device.set_format(
@@ -259,17 +254,49 @@ class FTCamera:
                 height=self._frame_size.height,
                 pixel_format=self._format.pixel_format)
         else:
-            self._device.set(cv.CAP_PROP_CONVERT_RGB, 0)
-            self._device.set(cv.CAP_PROP_FORMAT, -1)
+            self._filter_video.set_format(self._frame_size.index)
 
-    def _init_arrays(self: "FTCamera") -> None:
+            # make grabber accept YUV2 not RGB24
+            guidYUV2 = '{32595559-0000-0010-8000-00AA00389B71}'
+            self._filter_grabber.set_media_type(
+                pgdsg.MediaTypes.Video, guidYUV2)
+
+            # by changing the format we have to replace the callback
+            # handler too. this is required since the original callback
+            # handler expects a 3-channel image and YUV2 delivers
+            # 2 channels. this crashes python_grabber
+            class SampleGrabberYUV2(pgdsg.SampleGrabberCallback):
+                def __init__(self: 'SampleGrabberYUV2',
+                             callback: pgdsg.Callable[[pgdsg.Mat], None]):
+                    super(SampleGrabberYUV2, self).__init__(callback)
+
+                def BufferCB(self: 'SampleGrabberYUV2', this, SampleTime,
+                             pBuffer: pgdsg.NPBUFFER, BufferLen: int) -> int:
+                    if self.keep_photo:
+                        self.keep_photo = False
+                        w = self.image_resolution[0]
+                        h = self.image_resolution[1]
+                        img = np.ctypeslib.as_array(pBuffer, shape=(h, w, 2))
+                        # this is brain-dead. the video is returned with the
+                        # x and y axis flipped. this totally breaks the YUV
+                        # decoding. switching axes fixes this mess
+                        img = np.moveaxis(img, 0, 1)
+                        self.callback(img)
+                    return 0
+
+            self._filter_grabber.set_callback(
+                SampleGrabberYUV2(self._async_grabber), 1)
+
+            # an alternative is pgdsi.GUID_NULL accepting everything
+
+    def _init_arrays(self: 'FTCamera') -> None:
         """Create numpy arrays to fill during capturing."""
         self._arr_data = np.zeros([self._pixel_count * 2], dtype=np.uint8)
         self._arr_merge = np.zeros([self._pixel_count, 3], dtype=np.uint8)
-        self._arr_c2 = np.empty((self._half_pixel_count), np.uint8)
-        self._arr_c3 = np.empty((self._half_pixel_count), np.uint8)
+        self._arr_c2 = np.empty([self._half_pixel_count], np.uint8)
+        self._arr_c3 = np.empty([self._half_pixel_count], np.uint8)
 
-    def _find_controls(self: "FTCamera") -> None:
+    def _find_controls(self: 'FTCamera') -> None:
         """Logs all controls and stores them for use."""
         self._controls = []
         FTCamera._logger.info("controls:")
@@ -281,60 +308,64 @@ class FTCamera:
                     continue
                 self._controls.append(control)
 
+    @property
+    def device_index(self: 'FTCamera') -> int:
+        return self._index
+
     if isLinux:
         @property
-        def device(self: "FTCamera") -> v4l.Device:
+        def device(self: 'FTCamera') -> v4l.Device:
             """Video4Linux device if open or None if closed."""
             return self._device
     else:
         @property
-        def device(self: "FTCamera") -> cv.VideoCapture:
+        def device(self: 'FTCamera') -> pgdsg.VideoInput:
             """Device if open or None if closed."""
             return self._device
 
     @property
-    def frame_width(self: "FTCamera") -> int:
+    def frame_width(self: 'FTCamera') -> int:
         """Width in pixels of captured frames.
 
         Only valid if device is open."""
         return self._frame_width
 
     @property
-    def frame_height(self: "FTCamera") -> int:
+    def frame_height(self: 'FTCamera') -> int:
         """Height in pixels of captured frames.
 
         Only valid if device is open."""
         return self._frame_height
 
     @property
-    def frame_fps(self: "FTCamera") -> float:
+    def frame_fps(self: 'FTCamera') -> float:
         """Capture frame rate.
 
         Only valid if device is open."""
         return float(self._frame_size.min_fps)
 
     @property
-    def frame_format(self: "FTCamera") -> str:
+    def frame_format(self: 'FTCamera') -> str:
         """Capture pixel format.
 
         Only valid if device is open."""
         return self._frame_size.pixel_format.name
 
     @property
-    def frame_format_description(self: "FTCamera") -> str:
+    def frame_format_description(self: 'FTCamera') -> str:
         """Capture pixel format description.
 
         Only valid if device is open."""
         return self._format.description
 
     @property
-    def controls(self: "FTCamera") -> "list[FTCamera.Control]":
+    def controls(self: 'FTCamera') -> "list[FTCamera.Control]":
         """List of all supported controls.
 
         Only valid if device is open."""
         return self._controls
 
-    async def close(self: "FTCamera") -> None:
+    async def close(self: 'FTCamera') -> None:
         """Closes the device if open.
 
         If capturing stops capturing first.
@@ -347,12 +378,16 @@ class FTCamera:
             if isLinux:
                 self._device.close()
             else:
-                self._device.release()
+                self._filter_graph.stop()
+                self._filter_graph.remove_filters()
+                self._filter_grabber = None
+                self._filter_video = None
+                self._filter_graph = None
         except Exception:
             pass
         self._device = None
 
-    def start_read(self: "FTCamera") -> None:
+    def start_read(self: 'FTCamera') -> None:
         """Start capturing frames if not capturing and device is open."""
         if self._task_read or not self._device:
             return
@@ -364,11 +399,12 @@ class FTCamera:
             self._read_frame = None
             self._task_read_stop = False
             self._task_lock = threading.Lock()
+            self._filter_graph.run()
             self._task_read = threading.Thread(target=self._async_read)
             self._task_read.start()
             self._task_process = aio.create_task(self._async_process())
 
-    async def stop_read(self: "FTCamera") -> None:
+    async def stop_read(self: 'FTCamera') -> None:
         """Stop capturing frames if capturing."""
         if not self._task_read or not self._device:
             return
@@ -381,6 +417,7 @@ class FTCamera:
                 FTCamera._logger.info("FTCamera.stop_read: read task stopped")
             self._task_read = None
         else:
+            self._filter_graph.stop()
             self._task_read_stop = True
             self._task_process.cancel()
             try:
@@ -393,19 +430,22 @@ class FTCamera:
             self._task_lock = None
 
     if isLinux:
-        async def _async_read(self: "FTCamera") -> None:
+        async def _async_read(self: 'FTCamera') -> None:
             async for frame in self._device:
                 if not await self._process_frame(frame):
                     break
     else:
-        def _async_read(self: "FTCamera") -> None:
+        def _async_read(self: 'FTCamera') -> None:
             while not self._task_read_stop:
-                has_frame, frame = self._device.read()
-                with self._task_lock:
-                    self._has_frame = has_frame
-                    self._read_frame = frame
+                self._filter_graph.grab_frame()
+                time.sleep(0.001)
 
-        async def _async_process(self: "FTCamera") -> None:
+        def _async_grabber(self: 'FTCamera', image: np.ndarray) -> None:
+            with self._task_lock:
+                self._read_frame = image
+                self._has_frame = True
+
+        async def _async_process(self: 'FTCamera') -> None:
             while True:
                 has_frame = False
                 frame = None
@@ -422,7 +462,7 @@ class FTCamera:
                     await aio.sleep(0.001)
 
     if isLinux:
-        async def _process_frame(self: "FTCamera", frame: v4l.Frame) -> bool:
+        async def _process_frame(self: 'FTCamera', frame: v4l.Frame) -> bool:
             """Process captured frames.
 
             Operates only on YUV422 format right now. Calls _decode_yuv422
@@ -453,11 +493,21 @@ class FTCamera:
                 return False
             return True
     else:
-        async def _process_frame(self: "FTCamera", frame: np.ndarray) -> bool:
+        async def _process_frame(self: 'FTCamera', frame: np.ndarray) -> bool:
             if not self.callback_frame or len(frame) == 0:
                 return True
             try:
-                await self.callback_frame(frame)
+                match self._format.pixel_format:
+                    case 'YUY2':
+                        self._decode_yuv422(frame)
+                    case _:
+                        FTCamera._logger.error(
+                            "Unsupported pixel format: {}".format(
+                                self._format.pixel_format))
+                        return False
+                await self.callback_frame(
+                    self._arr_merge.reshape([self._frame_size.height,
+                                             self._frame_size.width, 3]))
             except aio.CancelledError:
                 raise
             except Exception:
@@ -465,20 +515,32 @@ class FTCamera:
                 return False
             return True
 
-    def _decode_yuv422(self: "FTCamera", frame: list[bytes]) -> None:
-        """Decode YUV422 frame into YUV444 frame."""
-        self._arr_data[:] = np.frombuffer(frame, dtype=np.uint8)
+    if isLinux:
+        def _decode_yuv422(self: 'FTCamera', frame: list[bytes]) -> None:
+            """Decode YUV422 frame into YUV444 frame."""
+            self._arr_data[:] = np.frombuffer(frame, dtype=np.uint8)
 
-        self._arr_merge[:, 0] = np.array(self._arr_data[0::2])
-        self._arr_c2[:] = np.array(self._arr_data[1::4])
-        self._arr_c3[:] = np.array(self._arr_data[3::4])
+            self._arr_merge[:, 0] = np.array(self._arr_data[0::2])
+            self._arr_c2[:] = np.array(self._arr_data[1::4])
+            self._arr_c3[:] = np.array(self._arr_data[3::4])
 
-        self._arr_merge[0:self._pixel_count:2, 1] = self._arr_c2
-        self._arr_merge[1:self._pixel_count:2, 1] = self._arr_c2
-        self._arr_merge[0:self._pixel_count:2, 2] = self._arr_c3
-        self._arr_merge[1:self._pixel_count:2, 2] = self._arr_c3
+            self._arr_merge[0:self._pixel_count:2, 1] = self._arr_c2
+            self._arr_merge[1:self._pixel_count:2, 1] = self._arr_c2
+            self._arr_merge[0:self._pixel_count:2, 2] = self._arr_c3
+            self._arr_merge[1:self._pixel_count:2, 2] = self._arr_c3
+    else:
+        def _decode_yuv422(self: 'FTCamera', frame: np.ndarray) -> None:
+            self._arr_merge[:, 0] = frame[:, :, 0].ravel(order='F')
 
-    def _decode_yuv422_y_only(self: "FTCamera", frame: list[bytes]) -> None:
+            self._arr_c2[:] = np.array(frame[:, :, 1:].ravel(order='F')[0::2])
+            self._arr_c3[:] = np.array(frame[:, :, 1:].ravel(order='F')[1::2])
+
+            self._arr_merge[0:self._pixel_count:2, 1] = self._arr_c2
+            self._arr_merge[1:self._pixel_count:2, 1] = self._arr_c2
+            self._arr_merge[0:self._pixel_count:2, 2] = self._arr_c3
+            self._arr_merge[1:self._pixel_count:2, 2] = self._arr_c3
+
+    def _decode_yuv422_y_only(self: 'FTCamera', frame: list[bytes]) -> None:
         """Fast version of _decode_yuv422.
 
         This version is faster since it only copies the Y channel

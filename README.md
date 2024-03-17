@@ -10,8 +10,11 @@ To run the test app prepare a python virtual environment like this:
 Enter the virtual environment:
 > source venv_vftta/bin/activate
 
-Install the required packages:
+Install the required packages (Linux):
 > python -m pip install --upgrade toga numpy Pillow v4l2py opencv-python
+
+Install the required packages (Windows):
+> python -m pip install --upgrade toga numpy Pillow pygrabber opencv-python
 
 Run the application:
 > cd src

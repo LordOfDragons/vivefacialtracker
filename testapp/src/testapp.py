@@ -281,7 +281,11 @@ class TestApp(toga.App):
 
         if ViveTracker.is_camera_vive_tracker(self.ftcamera.device):
             try:
-                self.vivetracker = ViveTracker(self.ftcamera.device.fileno())
+                if isLinux:
+                    self.vivetracker = ViveTracker(self.ftcamera.device.fileno())
+                else:
+                    self.vivetracker = ViveTracker(self.ftcamera.device,
+                                                   self.ftcamera.device_index)
             except Exception:
                 self.logger.error(traceback.format_exc())
 

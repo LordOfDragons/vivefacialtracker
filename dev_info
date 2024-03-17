@@ -340,40 +340,8 @@ using regular USB video device streaming.
 Windows
 =======
 
-Right now only Linux is supported since direct device access is used using ioctl.
-On windows there is something similar: DeviceIOControl
-- https://learn.microsoft.com/en-us/windows/win32/api/ioapiset/nf-ioapiset-deviceiocontrol
-
-This requires to open the device using Createfile and some special syntax
-- https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilea
-
-On python this should be also possible using pywin32:
-- https://pypi.org/project/pywin32/
-- https://mhammond.github.io/pywin32/win32file__DeviceIoControl_meth.html
-> python -m pip install --upgrade pywin32
-
-There are some examples that could help:
+Windows has no simple access to USB devices as Linux has. It is required to
+go by DirectShow which is a pain but the only solution.
 - https://github.com/andreaschiavinato/python_grabber
-- https://github.com/jaraco/jaraco.video
 
-This has though not been looked at in more detail so far. Feel free to do it.
-
-OpenCV is not an option for windows. It can't return raw data and is slow or plain
-out does not open camera devices. DirectShow is an alternative to OpenCV. There is
-also Windows Media Foundation which superceeded DirectShow. WMF has a SourceReader
-class which allows raw data access.
-
-DirectShow has a sort-of python binding while WMF has none (requires using FFI).
-Keeping note here of some relevant links concerning WMF:
-
-- https://elcharolin.wordpress.com/2017/08/28/webcam-capture-with-the-media-foundation-sdk/
-- https://learn.microsoft.com/en-us/windows/win32/medfound/source-reader
-- https://medium.com/@torbengraebergt/c-c-and-python-class-interfacing-f45a9ee352f4
-- https://github.com/nihon-tc/Rtest/blob/master/header/Microsoft%20SDKs/Windows/v7.0A/Include/mfapi.h
-- https://www.swig.org
-- https://docs.python-guide.org/scenarios/clibs/
-- http://docs.cython.org/en/latest/src/userguide/wrapping_CPlusPlus.html#
-
-DirectShow is COM base and using https://github.com/andreaschiavinato/python_grabber
-can be accessed with no additional work. It has it's own problems though, in particular
-not working properly
+Requires dealing with COM interfaces and some other shenanigans to get it working
