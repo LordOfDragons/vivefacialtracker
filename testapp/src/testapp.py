@@ -248,7 +248,7 @@ class TestApp(toga.App):
         else:
             self.lab_control_info.text = "Control: -"
 
-    async def process_frame(self: "TestApp", data: np.ndarray) -> None:
+    def process_frame(self: "TestApp", data: np.ndarray) -> None:
         if self.vivetracker:
             data = self.vivetracker.process_frame(data)
         match self.sel_show.value.value:

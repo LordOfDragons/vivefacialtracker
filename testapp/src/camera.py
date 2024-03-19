@@ -456,7 +456,7 @@ class FTCamera:
     if isLinux:
         async def _async_read(self: 'FTCamera') -> None:
             async for frame in self._device:
-                if not await self._process_frame(frame):
+                if not self._process_frame(frame):
                     break
     else:
         def _async_read(self: 'FTCamera') -> None:
@@ -480,13 +480,13 @@ class FTCamera:
                     self._read_frame = None
 
                 if has_frame:
-                    if not await self._process_frame(frame):
+                    if not self._process_frame(frame):
                         break
                 else:
                     await aio.sleep(0.001)
 
     if isLinux:
-        async def _process_frame(self: 'FTCamera', frame: v4l.Frame) -> bool:
+        def _process_frame(self: 'FTCamera', frame: v4l.Frame) -> bool:
             """Process captured frames.
 
             Operates only on YUV422 format right now. Calls _decode_yuv422
@@ -507,7 +507,7 @@ class FTCamera:
                         FTCamera._logger.error("Unsupported pixel format: {}".
                                                format(frame.pixel_format))
                         return False
-                await self.callback_frame(self._arr_merge.reshape(
+                self.callback_frame(self._arr_merge.reshape(
                     [frame.height, frame.width, 3]))
 
             except aio.CancelledError:
@@ -517,7 +517,7 @@ class FTCamera:
                 return False
             return True
     else:
-        async def _process_frame(self: 'FTCamera', frame: np.ndarray) -> bool:
+        def _process_frame(self: 'FTCamera', frame: np.ndarray) -> bool:
             if not self.callback_frame or len(frame) == 0:
                 return True
             try:
@@ -529,7 +529,7 @@ class FTCamera:
                             "Unsupported pixel format: {}".format(
                                 self._format.pixel_format))
                         return False
-                await self.callback_frame(
+                self.callback_frame(
                     self._arr_merge.reshape([self._frame_size.height,
                                              self._frame_size.width, 3]))
             except aio.CancelledError:
