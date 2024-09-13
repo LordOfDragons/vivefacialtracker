@@ -25,18 +25,27 @@ light. See below for what this means for the image format.
 Video4Linux
 ===========
 
+Bus 004 Device 024: ID 0bb4:0321 HTC (High Tech Computer Corp.) HTC Multimedia Camera
+
 This is the output of the v4l2-ctl command:
 
-> v4l2-ctl -d /dev/video2 --list-formats-ext
+> v4l2-ctl --list-devices
 
 >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
-Bus 004 Device 024: ID 0bb4:0321 HTC (High Tech Computer Corp.) HTC Multimedia Camera
+VIVE Pro Multimedia Camera (usb-0000:0f:00.0-4.1.1):
+        /dev/video0
+        /dev/video1
+        /dev/media0
 
 HTC Multimedia Camera: HTC Mult (usb-0000:0f:00.0-4.1.2.1):
         /dev/video2
         /dev/video3
         /dev/media1
+<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 
+> v4l2-ctl -d /dev/video2 --list-formats-ext
+
+>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 ioctl: VIDIOC_ENUM_FMT
         Type: Video Capture
 
