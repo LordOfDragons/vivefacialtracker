@@ -3,5 +3,8 @@
 		{
 			"path": "."
 		}
-	]
+	],
+	"settings": {
+		"python.defaultInterpreterPath": "${workspaceFolder}/../venv_vftta/bin/python3"
+	}
 }
