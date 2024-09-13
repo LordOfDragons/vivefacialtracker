@@ -22,15 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
-import platform
-import numpy as np
-import PIL
 import asyncio as aio
-import cv2 as cv
 import traceback
 import time
 import logging
 from enum import Enum
+
+import platform
+import numpy as np
 
 isLinux = platform.system() == 'Linux'
 

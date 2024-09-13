@@ -22,13 +22,14 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+from timeit import default_timer as timer
+
 import platform
 import logging
 import ctypes
 import time
 import cv2 as cv
 import numpy as np
-from timeit import default_timer as timer
 
 isLinux = platform.system() == 'Linux'
 

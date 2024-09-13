@@ -22,19 +22,20 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
 
+from enum import Enum
+from timeit import default_timer as timer
+import traceback
+import logging
+import asyncio as aio
+
 import platform
 import toga
 import toga.style.pack as tp
 import numpy as np
-import PIL
+from PIL import Image
 import cv2 as cv
-import traceback
-import logging
-import asyncio as aio
 from camera import FTCamera
 from vivetracker import ViveTracker
-from enum import Enum
-from timeit import default_timer as timer
 
 isLinux = platform.system() == 'Linux'
 
@@ -71,12 +72,12 @@ class TestApp(toga.App):
         if widget.value:
             if self.ftcamera:
                 return
-            self.view_camera.image = PIL.Image.new("L", (400, 400), 40)
+            self.view_camera.image = Image.new("L", (400, 400), 40)
             await self.open_ftcamera()
         else:
             if not self.ftcamera:
                 return
-            self.view_camera.image = PIL.Image.new("L", (400, 400), 40)
+            self.view_camera.image = Image.new("L", (400, 400), 40)
             await self.close_ftcamera()
 
     async def on_button_test(self: "TestApp",
@@ -273,7 +274,7 @@ class TestApp(toga.App):
                 data = cv.cvtColor(data, cv.COLOR_YUV2BGR)
                 data = cv.cvtColor(data, cv.COLOR_BGR2YUV)
                 data = cv.split(data)[0]
-        image = PIL.Image.fromarray(data)
+        image = Image.fromarray(data)
 
         if isLinux:
             self.view_camera.image = image
