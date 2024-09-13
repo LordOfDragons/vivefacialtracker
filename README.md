@@ -5,20 +5,30 @@ Test app to stream from VIVE Facial Tracker under Linux.
 # Test App - Prepare
 
 To run the test app prepare a python virtual environment like this:
-> python -m venv venv_vftta
+```
+python -m venv venv_vftta
+```
 
 Enter the virtual environment:
-> source venv_vftta/bin/activate
+```
+source venv_vftta/bin/activate
+```
 
 Install the required packages (Linux):
-> python -m pip install --upgrade toga numpy Pillow v4l2py opencv-python
+```
+python -m pip install --upgrade toga numpy Pillow v4l2py opencv-python
+```
 
 Install the required packages (Windows):
-> python -m pip install --upgrade toga numpy Pillow pygrabber opencv-python
+```
+python -m pip install --upgrade toga numpy Pillow pygrabber opencv-python
+```
 
 Run the application:
-> cd src
-> python3 -m testapp
+```
+cd src
+python3 -m testapp
+```
 
 Select the video device of the VIVE Facial Tracker. Usually this is 2
 which refers to /dev/video2 . See the information section for more details.
